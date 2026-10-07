@@ -121,11 +121,23 @@ function parseSessionField(fullText, exactLabel) {
   return '-';
 }
 
+function getActiveMonthKeys() {
+  if (selectedCountry === 'todos') {
+    const monthsSet = new Set();
+    Object.values(COUNTRY_MONTH_URLS).forEach(countryObj => {
+      Object.keys(countryObj).forEach(m => monthsSet.add(m));
+    });
+    const monthOrder = ['febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    return Array.from(monthsSet).sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
+  }
+  return Object.keys(COUNTRY_MONTH_URLS[selectedCountry] || {});
+}
+
 function populateCountrySelector() {
   const selectPais = document.getElementById('filter-pais');
   if (!selectPais) return;
 
-  selectPais.innerHTML = '';
+  selectPais.innerHTML = '<option value="todos">Todos los países</option>';
   Object.keys(COUNTRY_MONTH_URLS).forEach(countryKey => {
     const option = document.createElement('option');
     option.value = countryKey;
@@ -133,7 +145,7 @@ function populateCountrySelector() {
     selectPais.appendChild(option);
   });
 
-  selectPais.value = selectedCountry;
+  selectPais.value = selectedCountry || 'todos';
 
   if (!selectPais.dataset.hasListener) {
     selectPais.addEventListener('change', handleCountryChange);
@@ -159,7 +171,9 @@ function populateMonthSelector() {
   const currentVal = selectMes.value || 'todos';
   selectMes.innerHTML = '<option value="todos">Todos los meses</option>';
 
-  Object.keys(MONTH_URLS).forEach(monthKey => {
+  const monthKeys = getActiveMonthKeys();
+
+  monthKeys.forEach(monthKey => {
     const option = document.createElement('option');
     option.value = monthKey;
     const formattedName = monthKey.charAt(0).toUpperCase() + monthKey.slice(1);
@@ -167,7 +181,7 @@ function populateMonthSelector() {
     selectMes.appendChild(option);
   });
 
-  if (Object.keys(MONTH_URLS).includes(currentVal)) {
+  if (monthKeys.includes(currentVal)) {
     selectMes.value = currentVal;
   } else {
     selectMes.value = 'todos';
@@ -175,30 +189,80 @@ function populateMonthSelector() {
 }
 
 async function fetchCurrentMonthData() {
-  const monthKeys = Object.keys(MONTH_URLS);
+  const monthKeys = getActiveMonthKeys();
   if (monthKeys.length === 0) return;
 
   const lastMonthKey = monthKeys[monthKeys.length - 1];
-  if (!MONTH_URLS[lastMonthKey]) return;
+  const countriesToFetch = selectedCountry === 'todos' 
+    ? Object.keys(COUNTRY_MONTH_URLS).filter(c => COUNTRY_MONTH_URLS[c][lastMonthKey])
+    : (COUNTRY_MONTH_URLS[selectedCountry] ? [selectedCountry] : []);
 
-  const freshUrl = `${MONTH_URLS[lastMonthKey]}&_cb=${Date.now()}`;
-
-  await new Promise((resolve) => {
+  const fetchPromises = countriesToFetch.map(country => new Promise((resolve) => {
+    const freshUrl = `${COUNTRY_MONTH_URLS[country][lastMonthKey]}&_cb=${Date.now()}`;
     Papa.parse(freshUrl, {
       download: true,
       header: true,
       skipEmptyLines: 'greedy',
       transformHeader: h => (h ? h.replace(/<[^>]*>/g, '').replace(/[\r\n]/g, '').trim() : ''),
       complete: res => {
-        allMonthsData[lastMonthKey] = (res.data || [])
-          .map(r => ({ ...r, _MES_ORIGEN: lastMonthKey }))
+        const rows = (res.data || [])
+          .map(r => ({ ...r, _MES_ORIGEN: lastMonthKey, _PAIS_ORIGEN: country }))
           .filter(r => getRowValue(r, 'PROMOTOR') !== '');
-        resolve();
+        resolve(rows);
       },
-      error: () => resolve()
+      error: () => resolve([])
     });
-  });
+  }));
+
+  const results = await Promise.all(fetchPromises);
+  allMonthsData[lastMonthKey] = results.flat();
   loadDashboardData();
+}
+
+async function preloadAllMonths() {
+  const monthKeys = getActiveMonthKeys();
+  if (monthKeys.length === 0) return;
+
+  const lastMonthKey = monthKeys[monthKeys.length - 1];
+  const cacheKeySuffix = selectedCountry.toLowerCase().replace(/\s+/g, '_');
+  const HISTORICAL_CACHE_KEY = `dashboard_consolidado_historical_${cacheKeySuffix}_v1`;
+  
+  let cachedHistorical = localStorage.getItem(HISTORICAL_CACHE_KEY);
+  let historicalData = cachedHistorical ? JSON.parse(cachedHistorical) : {};
+  const missingHistorical = monthKeys.filter(m => m !== lastMonthKey && !historicalData[m]);
+
+  if (missingHistorical.length > 0) {
+    const historicalPromises = missingHistorical.map(month => new Promise(async (resolve) => {
+      const countriesToFetch = selectedCountry === 'todos'
+        ? Object.keys(COUNTRY_MONTH_URLS).filter(c => COUNTRY_MONTH_URLS[c][month])
+        : (COUNTRY_MONTH_URLS[selectedCountry]?.[month] ? [selectedCountry] : []);
+
+      const countryPromises = countriesToFetch.map(country => new Promise((resCountry) => {
+        Papa.parse(COUNTRY_MONTH_URLS[country][month], {
+          download: true,
+          header: true,
+          skipEmptyLines: 'greedy',
+          transformHeader: h => (h ? h.replace(/<[^>]*>/g, '').replace(/[\r\n]/g, '').trim() : ''),
+          complete: res => resCountry(
+            (res.data || [])
+              .map(r => ({ ...r, _MES_ORIGEN: month, _PAIS_ORIGEN: country }))
+              .filter(r => getRowValue(r, 'PROMOTOR') !== '')
+          ),
+          error: () => resCountry([])
+        });
+      }));
+
+      const monthRowsArray = await Promise.all(countryPromises);
+      resolve({ month, data: monthRowsArray.flat() });
+    }));
+
+    const results = await Promise.all(historicalPromises);
+    results.forEach(res => { historicalData[res.month] = res.data; });
+    localStorage.setItem(HISTORICAL_CACHE_KEY, JSON.stringify(historicalData));
+  }
+
+  allMonthsData = { ...historicalData };
+  await fetchCurrentMonthData();
 }
 
 async function preloadAllMonths() {
@@ -453,9 +517,8 @@ function resetAllFilters() {
 
   const selectPais = document.getElementById('filter-pais');
   if (selectPais) {
-    selectPais.value = Object.keys(COUNTRY_MONTH_URLS)[0] || '';
-    selectedCountry = selectPais.value;
-    MONTH_URLS = COUNTRY_MONTH_URLS[selectedCountry] || {};
+    selectPais.value = 'todos';
+    selectedCountry = 'todos';
   }
 
   const selectMes = document.getElementById('filter-mes');
@@ -482,7 +545,7 @@ function resetAllFilters() {
 }
 
 function hasLastThreeLowMonths(agentMonthsData) {
-  const monthKeys = Object.keys(MONTH_URLS);
+  const monthKeys = getActiveMonthKeys();
   const last3Months = monthKeys.slice(-3);
 
   if (last3Months.length < 3) return false;
@@ -498,7 +561,7 @@ function hasLastThreeLowMonths(agentMonthsData) {
 }
 
 function hasTwoConsecutiveGreenMonths(agentMonthsData) {
-  const monthKeys = Object.keys(MONTH_URLS);
+  const monthKeys = getActiveMonthKeys();
   
   if (monthKeys.length < 2) return false;
 
@@ -690,7 +753,7 @@ function renderFocusTable(data) {
   }
 
   const selectedMonth = document.getElementById('filter-mes')?.value || 'todos';
-  let monthsToDisplay = selectedMonth === 'todos' ? Object.keys(MONTH_URLS) : [selectedMonth];
+  let monthsToDisplay = selectedMonth === 'todos' ? getActiveMonthKeys() : [selectedMonth];
 
   const currentSort = sortState['focus-table'] || { column: null, isAsc: true };
 
