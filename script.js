@@ -127,7 +127,7 @@ function getActiveMonthKeys() {
     Object.values(COUNTRY_MONTH_URLS).forEach(countryObj => {
       Object.keys(countryObj).forEach(m => monthsSet.add(m));
     });
-    const monthOrder = ['febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const monthOrder = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     return Array.from(monthsSet).sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
   }
   return Object.keys(COUNTRY_MONTH_URLS[selectedCountry] || {});
@@ -157,7 +157,7 @@ async function handleCountryChange() {
   const selectPais = document.getElementById('filter-pais');
   if (selectPais) {
     selectedCountry = selectPais.value;
-    MONTH_URLS = COUNTRY_MONTH_URLS[selectedCountry] || {};
+    MONTH_URLS = selectedCountry === 'todos' ? {} : (COUNTRY_MONTH_URLS[selectedCountry] || {});
   }
   allMonthsData = {};
   populateMonthSelector();
@@ -258,42 +258,11 @@ async function preloadAllMonths() {
 
     const results = await Promise.all(historicalPromises);
     results.forEach(res => { historicalData[res.month] = res.data; });
-    localStorage.setItem(HISTORICAL_CACHE_KEY, JSON.stringify(historicalData));
-  }
-
-  allMonthsData = { ...historicalData };
-  await fetchCurrentMonthData();
-}
-
-async function preloadAllMonths() {
-  const monthKeys = Object.keys(MONTH_URLS);
-  if (monthKeys.length === 0) return;
-
-  const lastMonthKey = monthKeys[monthKeys.length - 1];
-  const HISTORICAL_CACHE_KEY = `dashboard_consolidado_historical_${selectedCountry.toLowerCase().replace(/\s+/g, '_')}_v1`;
-  let cachedHistorical = localStorage.getItem(HISTORICAL_CACHE_KEY);
-  let historicalData = cachedHistorical ? JSON.parse(cachedHistorical) : {};
-  const missingHistorical = monthKeys.filter(m => m !== lastMonthKey && !historicalData[m]);
-
-  if (missingHistorical.length > 0) {
-    const historicalPromises = missingHistorical.map(month => new Promise((resolve) => {
-      if (!MONTH_URLS[month]) return resolve({ month, data: [] });
-      Papa.parse(MONTH_URLS[month], {
-        download: true,
-        header: true,
-        skipEmptyLines: 'greedy',
-        transformHeader: h => (h ? h.replace(/<[^>]*>/g, '').replace(/[\r\n]/g, '').trim() : ''),
-        complete: res => resolve({ 
-          month, 
-          data: (res.data || []).map(r => ({ ...r, _MES_ORIGEN: month })).filter(r => getRowValue(r, 'PROMOTOR') !== '') 
-        }),
-        error: () => resolve({ month, data: [] })
-      });
-    }));
-
-    const results = await Promise.all(historicalPromises);
-    results.forEach(res => { historicalData[res.month] = res.data; });
-    localStorage.setItem(HISTORICAL_CACHE_KEY, JSON.stringify(historicalData));
+    try {
+      localStorage.setItem(HISTORICAL_CACHE_KEY, JSON.stringify(historicalData));
+    } catch (e) {
+      console.warn("localStorage lleno, se omite caché local.");
+    }
   }
 
   allMonthsData = { ...historicalData };
@@ -546,9 +515,8 @@ function resetAllFilters() {
 
 function hasLastThreeLowMonths(agentMonthsData) {
   const monthKeys = getActiveMonthKeys();
-  const last3Months = monthKeys.slice(-3);
-
   if (last3Months.length < 3) return false;
+  const last3Months = monthKeys.slice(-3);
 
   return last3Months.every(m => {
     const record = agentMonthsData[m];
@@ -562,9 +530,7 @@ function hasLastThreeLowMonths(agentMonthsData) {
 
 function hasTwoConsecutiveGreenMonths(agentMonthsData) {
   const monthKeys = getActiveMonthKeys();
-  
   if (monthKeys.length < 2) return false;
-
   const last2Months = monthKeys.slice(-2);
 
   return last2Months.every(m => {
@@ -1885,7 +1851,7 @@ function renderTrendsGlobalTable() {
         labels: labels,
         datasets: [
           { label: 'Ventas Totales', data: totalVentas, backgroundColor: '#10b981', borderRadius: 4 },
-          { label: 'Meta Total', data: totalMeta, backgroundColor: '#ef4444', borderRadius: 4 }
+          { label: 'Meta Total', data: totalMeta, backgroundColor: '#ff4444', borderRadius: 4 }
         ]
       },
       options: {
