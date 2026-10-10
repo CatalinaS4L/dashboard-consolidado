@@ -42,8 +42,9 @@ const COUNTRY_MONTH_URLS = {
 };
 
 // Selección inicial por defecto (toma el primer país definido)
-let selectedCountry = Object.keys(COUNTRY_MONTH_URLS)[0] || '';
-let MONTH_URLS = COUNTRY_MONTH_URLS[selectedCountry] || {};
+let selectedCountry = 'todos';
+let MONTH_URLS = {};
+//let MONTH_URLS = COUNTRY_MONTH_URLS[selectedCountry] || {}; Esto lo cambió la IA pero no se porque entonces solo lo comento mientras tanto a ver si funciona
 
 const SUPERVISOR_COLORS = [
   '#2563eb', '#10b981', '#f59e0b', '#ef4444', 
@@ -515,8 +516,8 @@ function resetAllFilters() {
 
 function hasLastThreeLowMonths(agentMonthsData) {
   const monthKeys = getActiveMonthKeys();
-  if (last3Months.length < 3) return false;
   const last3Months = monthKeys.slice(-3);
+  if (last3Months.length < 3) return false;
 
   return last3Months.every(m => {
     const record = agentMonthsData[m];
