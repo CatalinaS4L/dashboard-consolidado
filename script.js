@@ -879,12 +879,14 @@ function renderGroupedTable(data, groupKey, selector, tableId) {
     const rawLeader = getRowValue(row, groupKey);
     const leader = rawLeader ? rawLeader.trim() : `Sin ${groupKey.toLowerCase()}`;
     const agentName = getRowValue(row, 'PROMOTOR');
+    const country = row._PAIS_ORIGEN;
 
     if (!groupMap[leader]) {
       groupMap[leader] = {
         leader: leader,
         recordsCount: 0,
         uniqueAgentsSet: new Set(),
+        paisesSet: new Set(), // Acumula los países asociados al líder
         metaTotal: 0,
         v1: 0, v2: 0, v3: 0, v4: 0, v5: 0,
         cierre: 0,
@@ -895,6 +897,9 @@ function renderGroupedTable(data, groupKey, selector, tableId) {
     groupMap[leader].recordsCount += 1;
     if (agentName) {
       groupMap[leader].uniqueAgentsSet.add(agentName.toUpperCase());
+    }
+    if (country) {
+      groupMap[leader].paisesSet.add(country);
     }
 
     groupMap[leader].metaTotal += parseNum(getRowValue(row, 'META'));
@@ -937,10 +942,12 @@ function renderGroupedTable(data, groupKey, selector, tableId) {
   leadersList.forEach(l => {
     const complianceHTML = getComplianceBadge(l.compliancePct.toString());
     const uniqueAgentsCount = l.uniqueAgentsSet.size;
+    const paisesStr = Array.from(l.paisesSet).join(', ');
+    const paisTag = paisesStr ? ` <span style="font-size: 0.82em; color: #64748b; font-weight: normal;">(${paisesStr})</span>` : '';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${l.leader}</strong></td>
+      <td><strong>${l.leader}</strong>${paisTag}</td>
       <td>${uniqueAgentsCount}</td>
       <td>${l.recordsCount}</td>
       <td>${l.metaTotal}</td>
