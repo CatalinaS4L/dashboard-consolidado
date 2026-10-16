@@ -42,10 +42,8 @@ const COUNTRY_MONTH_URLS = {
   }
 };
 
-// Selección inicial por defecto (toma el primer país definido)
 let selectedCountry = 'todos';
 let MONTH_URLS = {};
-//let MONTH_URLS = COUNTRY_MONTH_URLS[selectedCountry] || {}; Esto lo cambió la IA pero no se porque entonces solo lo comento mientras tanto a ver si funciona
 
 const SUPERVISOR_COLORS = [
   '#2563eb', '#10b981', '#f59e0b', '#ef4444', 
@@ -99,7 +97,6 @@ function filterRow(row) {
   return matchSearch && matchTrainer && matchSupervisor && matchCoordinador && matchStatus;
 }
 
-// Lista de etiquetas clave para delimitar el parser de las sesiones
 const EXACT_KEYWORDS = [
   "📅 Fecha", "🔗 URLTr", "🗣️ Speech", "📚 Producto", "🛡️ Objeciones", "🤝 Cierre", "📌 Acuerdos"
 ];
@@ -681,10 +678,11 @@ function renderTable(data) {
     const metaVal = getRowValue(row, 'META');
     const complianceVal = getRowValue(row, 'CUMPLIMIENTO MES');
     const complianceHTML = getComplianceBadge(complianceVal);
+    const paisTag = row._PAIS_ORIGEN ? ` <span style="font-size: 0.82em; color: #64748b; font-weight: normal;">(${row._PAIS_ORIGEN})</span>` : '';
     
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${getRowValue(row, 'PROMOTOR') || '-'}</strong></td>
+      <td><strong>${getRowValue(row, 'PROMOTOR') || '-'}</strong>${paisTag}</td>
       <td>${getRowValue(row, 'TRAINER') || '-'}</td>
       <td>${getRowValue(row, 'SUPERVISOR') || '-'}</td>
       <td>${getRowValue(row, 'COORDINADOR') || '-'}</td>
@@ -749,6 +747,7 @@ function renderFocusTable(data) {
       if (!fullAgentsMap[agentName]) {
         fullAgentsMap[agentName] = { 
           agentName: agentName, 
+          pais: row._PAIS_ORIGEN || '',
           monthsData: {},
           lastMonthStatus: '' 
         };
@@ -771,7 +770,7 @@ function renderFocusTable(data) {
     if (!agentName) return;
 
     if (!agentsMap[agentName]) {
-      agentsMap[agentName] = fullAgentsMap[agentName] || { agentName: agentName, monthsData: {}, lastMonthStatus: '' };
+      agentsMap[agentName] = fullAgentsMap[agentName] || { agentName: agentName, pais: row._PAIS_ORIGEN || '', monthsData: {}, lastMonthStatus: '' };
     }
   });
 
@@ -836,7 +835,8 @@ function renderFocusTable(data) {
 
   agentsList.forEach((agent) => {
     const tr = document.createElement('tr');
-    let rowHTML = `<td><strong>${agent.agentName}</strong></td>`;
+    const paisTag = agent.pais ? ` <span style="font-size: 0.82em; color: #64748b; font-weight: normal;">(${agent.pais})</span>` : '';
+    let rowHTML = `<td><strong>${agent.agentName}</strong>${paisTag}</td>`;
 
     monthsToDisplay.forEach(m => {
       const monthRecord = agent.monthsData[m];
@@ -981,6 +981,7 @@ function renderTrendsTable() {
           agentsHistory[agent] = {
             trainer: '-',
             supervisor: '-',
+            pais: row._PAIS_ORIGEN || '',
             months: {}
           };
         }
@@ -1015,10 +1016,11 @@ function renderTrendsTable() {
     card.className = 'agent-trend-card';
 
     const canvasId = `chart-trend-agent-${index}`;
+    const paisTag = info.pais ? ` <span style="font-size: 0.8rem; font-weight: normal; color: #64748b;">(${info.pais})</span>` : '';
 
     card.innerHTML = `
       <div class="agent-trend-header">
-        <h3>${agent}</h3>
+        <h3>${agent}${paisTag}</h3>
         <p style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">
           <strong>Supervisor:</strong> ${info.supervisor} | <strong>Trainer:</strong> ${info.trainer}
         </p>
@@ -1097,6 +1099,7 @@ function renderTrainerSessions(data) {
     if (!agentMonthMap[uniqueKey]) {
       agentMonthMap[uniqueKey] = {
         agentName: agent,
+        pais: row._PAIS_ORIGEN || '',
         mesLabel: `${mesFormatted} 2026`,
         trainer: getRowValue(row, 'TRAINER') || '-',
         supervisor: getRowValue(row, 'SUPERVISOR') || '-',
@@ -1154,6 +1157,8 @@ function renderTrainerSessions(data) {
     card.className = 'table-card agent-session-card';
     card.style.marginBottom = '20px';
 
+    const paisTag = info.pais ? `<span style="font-size: 0.8em; color: #64748b; font-weight: normal;"> (${info.pais})</span>` : '';
+
     const sessionsHTML = info.sessions.map(s => `
       <div class="session-block" style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; margin-top: 10px; background-color: #f9f9f9;">
         <div style="font-weight: bold; color: #2c3e50; margin-bottom: 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px;">
@@ -1172,7 +1177,7 @@ function renderTrainerSessions(data) {
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #06b706; padding-bottom: 8px; margin-bottom: 12px;">
         <div>
-          <h3 style="margin: 0; color: #2c3e50; display: inline-block; margin-right: 10px;">${info.agentName}</h3>
+          <h3 style="margin: 0; color: #2c3e50; display: inline-block; margin-right: 10px;">${info.agentName}${paisTag}</h3>
           <span style="background: #2c3e50; color: #fff; font-size: 0.78em; padding: 3px 8px; border-radius: 12px; font-weight: bold; vertical-align: middle;">
             📅 ${info.mesLabel}
           </span>
@@ -1409,6 +1414,7 @@ function renderDiagnosticTable(data) {
 
   diagnosticAgents.forEach(row => {
     const agent = getRowValue(row, 'PROMOTOR') || '-';
+    const paisTag = row._PAIS_ORIGEN ? ` <span style="font-size: 0.82em; color: #64748b; font-weight: normal;">(${row._PAIS_ORIGEN})</span>` : '';
     
     const rawMes = row._MES_ORIGEN || '';
     const mesFormatted = rawMes ? (rawMes.charAt(0).toUpperCase() + rawMes.slice(1)) : '-';
@@ -1428,7 +1434,7 @@ function renderDiagnosticTable(data) {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${agent}</strong></td>
+      <td><strong>${agent}</strong>${paisTag}</td>
       <td><span style="background: #e2e8f0; color: #334155; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.85em;">${mesFormatted}</span></td>
       <td style="text-align:center;">${habCom}</td>
       <td style="text-align:center;">${sondeo}</td>
